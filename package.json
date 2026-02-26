@@ -1,0 +1,14 @@
+{
+  "name": "multi-asset-performance-chart",
+  "version": "1.0.0",
+  "description": "Compare price performance across stocks, ETFs, and mutual funds",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-fetch": "^2.7.0"
+  }
+}

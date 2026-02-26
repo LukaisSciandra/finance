@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multi-Asset Performance Chart</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3250;
+      --text: #e8eaf6;
+      --text-muted: #7b82a8;
+      --accent: #5c6bc0;
+      --accent-hover: #7986cb;
+      --green: #26a69a;
+      --red: #ef5350;
+      --radius: 10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    header svg { color: var(--accent); flex-shrink: 0; }
+
+    header h1 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    header p {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    .main {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      flex: 1;
+      padding: 20px 24px;
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    /* Controls bar */
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: flex-end;
+      margin-bottom: 16px;
+    }
+
+    .search-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 240px;
+      max-width: 380px;
+    }
+
+    .search-wrap input {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 0.875rem;
+      padding: 9px 14px 9px 38px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .search-wrap input::placeholder { color: var(--text-muted); }
+    .search-wrap input:focus { border-color: var(--accent); }
+
+    .search-wrap svg.icon-search {
+      position: absolute;
+      left: 11px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .dropdown {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      z-index: 100;
+      max-height: 280px;
+      overflow-y: auto;
+      display: none;
+    }
+
+    .dropdown.open { display: block; }
+
+    .dropdown-item {
+      padding: 9px 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: background 0.15s;
+    }
+
+    .dropdown-item:hover { background: var(--border); }
+
+    .dropdown-item .sym {
+      font-weight: 600;
+      font-size: 0.875rem;
+      min-width: 60px;
+    }
+
+    .dropdown-item .sym-name {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .type-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      flex-shrink: 0;
+    }
+
+    .type-equity   { background: #1a3a5c; color: #64b5f6; }
+    .type-etf      { background: #1a3a2a; color: #66bb6a; }
+    .type-mutualfund { background: #3a2a1a; color: #ffa726; }
+    .type-index    { background: #2a1a3a; color: #ab47bc; }
+    .type-other    { background: #2a2a2a; color: #90a4ae; }
+
+    /* Range buttons */
+    .range-group {
+      display: flex;
+      gap: 4px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 3px;
+    }
+
+    .range-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 7px;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .range-btn:hover { color: var(--text); background: var(--border); }
+    .range-btn.active { background: var(--accent); color: #fff; }
+
+    /* Custom date range */
+    .date-inputs {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .date-inputs input[type="date"] {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 0.8rem;
+      padding: 7px 10px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .date-inputs input[type="date"]:focus { border-color: var(--accent); }
+    .date-inputs span { color: var(--text-muted); font-size: 0.8rem; }
+
+    /* Interval selector */
+    .interval-select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 0.8rem;
+      padding: 7px 10px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    /* Chart card */
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-height: 480px;
+    }
+
+    .chart-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .chart-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* Active tickers */
+    .tickers-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .ticker-chip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 20px;
+      padding: 5px 12px 5px 10px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: default;
+      border: 1px solid transparent;
+    }
+
+    .ticker-chip .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .ticker-chip .pct {
+      font-weight: 700;
+      font-size: 0.82rem;
+    }
+
+    .ticker-chip .pct.pos { color: var(--green); }
+    .ticker-chip .pct.neg { color: var(--red); }
+
+    .ticker-chip button.remove {
+      background: none;
+      border: none;
+      color: inherit;
+      opacity: 0.5;
+      cursor: pointer;
+      padding: 0;
+      margin-left: 2px;
+      font-size: 1rem;
+      line-height: 1;
+      transition: opacity 0.15s;
+    }
+
+    .ticker-chip button.remove:hover { opacity: 1; }
+
+    /* Chart canvas wrapper */
+    .canvas-wrap {
+      position: relative;
+      flex: 1;
+      min-height: 360px;
+    }
+
+    .canvas-wrap canvas { width: 100% !important; height: 100% !important; }
+
+    /* Empty state */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      height: 100%;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .empty-state svg { opacity: 0.4; }
+    .empty-state p { font-size: 0.9rem; }
+    .empty-state small { font-size: 0.78rem; }
+
+    /* Loading/error states */
+    .status-msg {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+    }
+
+    .status-msg.error { background: rgba(239,83,80,0.12); color: #ef9a9a; border: 1px solid rgba(239,83,80,0.2); }
+    .status-msg.loading { background: rgba(92,107,192,0.12); color: #9fa8da; border: 1px solid rgba(92,107,192,0.2); }
+
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(159,168,218,0.3);
+      border-top-color: #9fa8da;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .messages-area {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-height: 0;
+    }
+
+    /* Tooltip */
+    .chart-tooltip {
+      background: var(--surface2) !important;
+      border: 1px solid var(--border) !important;
+      border-radius: 8px !important;
+      padding: 10px 14px !important;
+    }
+
+    @media (max-width: 640px) {
+      .main { padding: 12px; }
+      header { padding: 12px 16px; }
+      .date-inputs { display: none; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+    <polyline points="16 7 22 7 22 13"/>
+  </svg>
+  <div>
+    <h1>Multi-Asset Performance Chart</h1>
+    <p>Compare price performance of stocks, ETFs &amp; mutual funds</p>
+  </div>
+</header>
+
+<div class="main">
+  <!-- Controls -->
+  <div class="controls">
+    <!-- Search -->
+    <div class="search-wrap" id="searchWrap">
+      <svg class="icon-search" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="text" id="searchInput" placeholder="Add symbol (e.g. AAPL, SPY, VFIAX)…" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" />
+      <div class="dropdown" id="dropdown"></div>
+    </div>
+
+    <!-- Preset ranges -->
+    <div class="range-group">
+      <button class="range-btn" data-range="1W">1W</button>
+      <button class="range-btn" data-range="1M">1M</button>
+      <button class="range-btn" data-range="3M">3M</button>
+      <button class="range-btn" data-range="6M">6M</button>
+      <button class="range-btn" data-range="YTD">YTD</button>
+      <button class="range-btn active" data-range="1Y">1Y</button>
+      <button class="range-btn" data-range="2Y">2Y</button>
+      <button class="range-btn" data-range="5Y">5Y</button>
+      <button class="range-btn" data-range="custom">Custom</button>
+    </div>
+
+    <!-- Custom dates (hidden unless custom selected) -->
+    <div class="date-inputs" id="customDates" style="display:none">
+      <input type="date" id="dateFrom" />
+      <span>to</span>
+      <input type="date" id="dateTo" />
+    </div>
+
+    <!-- Interval -->
+    <select class="interval-select" id="intervalSelect">
+      <option value="1d">Daily</option>
+      <option value="1wk">Weekly</option>
+      <option value="1mo">Monthly</option>
+    </select>
+  </div>
+
+  <!-- Status messages -->
+  <div class="messages-area" id="messagesArea"></div>
+
+  <!-- Chart card -->
+  <div class="chart-card">
+    <div class="chart-header">
+      <span class="chart-title">Price Performance (%)</span>
+      <div class="tickers-row" id="tickersRow"></div>
+    </div>
+    <div class="canvas-wrap" id="canvasWrap">
+      <div class="empty-state" id="emptyState">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+          <polyline points="16 7 22 7 22 13"/>
+        </svg>
+        <p>No assets added yet</p>
+        <small>Search for a stock, ETF, or mutual fund above to get started</small>
+      </div>
+      <canvas id="perfChart" style="display:none"></canvas>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+const state = {
+  assets: [],           // { symbol, name, quoteType, color, timestamps, closes }
+  range: '1Y',
+  interval: '1d',
+  dateFrom: null,
+  dateTo: null,
+};
+
+const PALETTE = [
+  '#5c6bc0','#26a69a','#ef5350','#ffa726','#ab47bc',
+  '#42a5f5','#66bb6a','#ec407a','#ff7043','#8d6e63',
+  '#26c6da','#d4e157','#7e57c2','#29b6f6','#ff8f00',
+];
+
+let chart = null;
+let searchTimer = null;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function colorForIndex(i) {
+  return PALETTE[i % PALETTE.length];
+}
+
+function fmtPct(v) {
+  const sign = v >= 0 ? '+' : '';
+  return `${sign}${v.toFixed(2)}%`;
+}
+
+function getDateRange() {
+  const now = new Date();
+  let from = new Date();
+
+  if (state.range === 'custom') {
+    return {
+      period1: Math.floor(new Date(state.dateFrom).getTime() / 1000),
+      period2: Math.floor(new Date(state.dateTo).getTime() / 1000),
+    };
+  }
+
+  switch (state.range) {
+    case '1W': from.setDate(now.getDate() - 7); break;
+    case '1M': from.setMonth(now.getMonth() - 1); break;
+    case '3M': from.setMonth(now.getMonth() - 3); break;
+    case '6M': from.setMonth(now.getMonth() - 6); break;
+    case 'YTD': from = new Date(now.getFullYear(), 0, 1); break;
+    case '1Y': from.setFullYear(now.getFullYear() - 1); break;
+    case '2Y': from.setFullYear(now.getFullYear() - 2); break;
+    case '5Y': from.setFullYear(now.getFullYear() - 5); break;
+    default: from.setFullYear(now.getFullYear() - 1);
+  }
+
+  return {
+    period1: Math.floor(from.getTime() / 1000),
+    period2: Math.floor(now.getTime() / 1000),
+  };
+}
+
+function getTypeBadge(type) {
+  if (!type) return { label: 'OTHER', cls: 'type-other' };
+  const t = type.toUpperCase();
+  if (t === 'ETF')        return { label: 'ETF', cls: 'type-etf' };
+  if (t === 'MUTUALFUND') return { label: 'FUND', cls: 'type-mutualfund' };
+  if (t === 'INDEX')      return { label: 'INDEX', cls: 'type-index' };
+  if (t === 'EQUITY')     return { label: 'STOCK', cls: 'type-equity' };
+  return { label: t.slice(0, 5), cls: 'type-other' };
+}
+
+// ─── Fetch helpers ────────────────────────────────────────────────────────────
+async function fetchChartData(symbol) {
+  const { period1, period2 } = getDateRange();
+  const url = `/api/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=${state.interval}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to fetch data');
+  return data;
+}
+
+async function searchSymbols(query) {
+  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+  const data = await res.json();
+  return data.quotes || [];
+}
+
+// ─── Chart ────────────────────────────────────────────────────────────────────
+function buildDatasets() {
+  return state.assets.map((asset) => {
+    const { timestamps, closes, color, name, symbol } = asset;
+    if (!closes || closes.length === 0) return null;
+
+    const base = closes[0];
+    const points = timestamps.map((ts, i) => ({
+      x: new Date(ts * 1000),
+      y: closes[i] != null ? ((closes[i] - base) / base) * 100 : null,
+    }));
+
+    return {
+      label: symbol,
+      data: points,
+      borderColor: color,
+      backgroundColor: color + '18',
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 5,
+      pointHoverBackgroundColor: color,
+      tension: 0.3,
+      fill: false,
+      spanGaps: true,
+    };
+  }).filter(Boolean);
+}
+
+function renderChart() {
+  const canvas = document.getElementById('perfChart');
+  const empty = document.getElementById('emptyState');
+
+  if (state.assets.length === 0) {
+    canvas.style.display = 'none';
+    empty.style.display = 'flex';
+    if (chart) { chart.destroy(); chart = null; }
+    return;
+  }
+
+  canvas.style.display = 'block';
+  empty.style.display = 'none';
+
+  const datasets = buildDatasets();
+
+  const chartConfig = {
+    type: 'line',
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 400 },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#22263a',
+          borderColor: '#2e3250',
+          borderWidth: 1,
+          padding: 12,
+          titleColor: '#7b82a8',
+          bodyColor: '#e8eaf6',
+          callbacks: {
+            title(items) {
+              if (!items.length) return '';
+              const d = new Date(items[0].parsed.x);
+              return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            },
+            label(item) {
+              const asset = state.assets.find((a) => a.symbol === item.dataset.label);
+              const name = asset?.name || item.dataset.label;
+              const val = item.parsed.y;
+              const sign = val >= 0 ? '+' : '';
+              return `  ${item.dataset.label}  ${sign}${val.toFixed(2)}%`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: {
+            unit: state.interval === '1d' ? (state.range === '1W' ? 'day' : 'month') :
+                  state.interval === '1wk' ? 'month' : 'quarter',
+            tooltipFormat: 'MMM d, yyyy',
+          },
+          grid: { color: '#2e3250', drawTicks: false },
+          ticks: { color: '#7b82a8', maxRotation: 0, font: { size: 11 } },
+          border: { color: '#2e3250' },
+        },
+        y: {
+          grid: { color: '#2e3250', drawTicks: false },
+          ticks: {
+            color: '#7b82a8',
+            font: { size: 11 },
+            callback(v) {
+              return (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+            },
+          },
+          border: { color: '#2e3250', dash: [4, 4] },
+        },
+      },
+    },
+  };
+
+  if (chart) {
+    chart.data = chartConfig.data;
+    chart.options = chartConfig.options;
+    chart.update();
+  } else {
+    chart = new Chart(canvas, chartConfig);
+  }
+}
+
+// ─── Ticker chips ─────────────────────────────────────────────────────────────
+function renderTickers() {
+  const row = document.getElementById('tickersRow');
+  row.innerHTML = '';
+
+  state.assets.forEach((asset, i) => {
+    const { symbol, closes, color } = asset;
+    let pctEl = '';
+
+    if (closes && closes.length >= 2) {
+      const base = closes[0];
+      const last = closes[closes.length - 1];
+      const pct = ((last - base) / base) * 100;
+      const cls = pct >= 0 ? 'pos' : 'neg';
+      pctEl = `<span class="pct ${cls}">${fmtPct(pct)}</span>`;
+    }
+
+    const chip = document.createElement('div');
+    chip.className = 'ticker-chip';
+    chip.style.background = color + '18';
+    chip.style.borderColor = color + '40';
+    chip.style.color = color;
+    chip.innerHTML = `
+      <span class="dot" style="background:${color}"></span>
+      <span>${symbol}</span>
+      ${pctEl}
+      <button class="remove" title="Remove" data-symbol="${symbol}">×</button>
+    `;
+    row.appendChild(chip);
+  });
+
+  row.querySelectorAll('button.remove').forEach((btn) => {
+    btn.addEventListener('click', () => removeAsset(btn.dataset.symbol));
+  });
+}
+
+// ─── Add / Remove assets ──────────────────────────────────────────────────────
+function showMessage(msg, type = 'loading', id) {
+  const area = document.getElementById('messagesArea');
+  const el = document.createElement('div');
+  el.className = `status-msg ${type}`;
+  if (id) el.id = id;
+  el.innerHTML = type === 'loading'
+    ? `<div class="spinner"></div><span>${msg}</span>`
+    : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg><span>${msg}</span>`;
+  area.appendChild(el);
+  return el;
+}
+
+function clearMessage(el) {
+  if (el && el.parentNode) el.parentNode.removeChild(el);
+}
+
+async function addAsset(symbol) {
+  symbol = symbol.toUpperCase().trim();
+  if (!symbol) return;
+  if (state.assets.find((a) => a.symbol === symbol)) return;
+
+  const msgEl = showMessage(`Loading ${symbol}…`, 'loading');
+
+  try {
+    const data = await fetchChartData(symbol);
+    clearMessage(msgEl);
+
+    const color = colorForIndex(state.assets.length);
+    state.assets.push({ ...data, color });
+    renderTickers();
+    renderChart();
+  } catch (err) {
+    clearMessage(msgEl);
+    const errEl = showMessage(`${symbol}: ${err.message}`, 'error');
+    setTimeout(() => clearMessage(errEl), 5000);
+  }
+}
+
+function removeAsset(symbol) {
+  state.assets = state.assets.filter((a) => a.symbol !== symbol);
+  // Re-assign colors for consistency
+  state.assets.forEach((a, i) => { a.color = colorForIndex(i); });
+  renderTickers();
+  renderChart();
+}
+
+async function refreshAll() {
+  if (state.assets.length === 0) return;
+  const symbols = state.assets.map((a) => a.symbol);
+  state.assets = [];
+  renderChart(); // show empty momentarily
+
+  for (const sym of symbols) {
+    await addAsset(sym);
+  }
+}
+
+// ─── Search dropdown ──────────────────────────────────────────────────────────
+function closeDropdown() {
+  document.getElementById('dropdown').classList.remove('open');
+}
+
+async function handleSearch(q) {
+  const dropdown = document.getElementById('dropdown');
+  if (q.length < 1) { closeDropdown(); return; }
+
+  dropdown.innerHTML = '<div class="dropdown-item" style="color:var(--text-muted)">Searching…</div>';
+  dropdown.classList.add('open');
+
+  try {
+    const quotes = await searchSymbols(q);
+    dropdown.innerHTML = '';
+
+    if (quotes.length === 0) {
+      dropdown.innerHTML = '<div class="dropdown-item" style="color:var(--text-muted)">No results</div>';
+      return;
+    }
+
+    quotes.forEach((q) => {
+      const badge = getTypeBadge(q.type);
+      const item = document.createElement('div');
+      item.className = 'dropdown-item';
+      item.innerHTML = `
+        <span class="type-badge ${badge.cls}">${badge.label}</span>
+        <span class="sym">${q.symbol}</span>
+        <span class="sym-name">${q.name || ''}</span>
+        ${q.exchange ? `<span style="font-size:0.7rem;color:var(--text-muted);flex-shrink:0">${q.exchange}</span>` : ''}
+      `;
+      item.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        addAsset(q.symbol);
+        document.getElementById('searchInput').value = '';
+        closeDropdown();
+      });
+      dropdown.appendChild(item);
+    });
+  } catch {
+    dropdown.innerHTML = '<div class="dropdown-item" style="color:var(--text-muted)">Search failed</div>';
+  }
+}
+
+// ─── Range & date pickers ─────────────────────────────────────────────────────
+function initDateDefaults() {
+  const now = new Date();
+  const from = new Date();
+  from.setFullYear(now.getFullYear() - 1);
+  document.getElementById('dateTo').value = now.toISOString().slice(0, 10);
+  document.getElementById('dateFrom').value = from.toISOString().slice(0, 10);
+  state.dateFrom = document.getElementById('dateFrom').value;
+  state.dateTo = document.getElementById('dateTo').value;
+}
+
+// ─── Event wiring ─────────────────────────────────────────────────────────────
+function init() {
+  initDateDefaults();
+
+  // Search input
+  const searchInput = document.getElementById('searchInput');
+  searchInput.addEventListener('input', (e) => {
+    clearTimeout(searchTimer);
+    const q = e.target.value.trim();
+    searchTimer = setTimeout(() => handleSearch(q), 250);
+  });
+
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const q = searchInput.value.trim();
+      if (q) {
+        addAsset(q);
+        searchInput.value = '';
+        closeDropdown();
+      }
+    }
+    if (e.key === 'Escape') closeDropdown();
+  });
+
+  searchInput.addEventListener('blur', () => {
+    setTimeout(closeDropdown, 150);
+  });
+
+  // Range buttons
+  document.querySelectorAll('.range-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.range-btn').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.range = btn.dataset.range;
+      const customDates = document.getElementById('customDates');
+      customDates.style.display = state.range === 'custom' ? 'flex' : 'none';
+      refreshAll();
+    });
+  });
+
+  // Custom dates
+  document.getElementById('dateFrom').addEventListener('change', (e) => {
+    state.dateFrom = e.target.value;
+    if (state.range === 'custom') refreshAll();
+  });
+
+  document.getElementById('dateTo').addEventListener('change', (e) => {
+    state.dateTo = e.target.value;
+    if (state.range === 'custom') refreshAll();
+  });
+
+  // Interval
+  document.getElementById('intervalSelect').addEventListener('change', (e) => {
+    state.interval = e.target.value;
+    refreshAll();
+  });
+
+  // Click outside closes dropdown
+  document.addEventListener('click', (e) => {
+    if (!document.getElementById('searchWrap').contains(e.target)) closeDropdown();
+  });
+
+  // Load default tickers on startup
+  ['SPY', 'QQQ', 'AAPL'].forEach((sym) => addAsset(sym));
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
