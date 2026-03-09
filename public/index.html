@@ -536,7 +536,8 @@ function buildDatasets() {
     const { timestamps, closes, color, name, symbol } = asset;
     if (!closes || closes.length === 0) return null;
 
-    const base = closes[0];
+    const base = closes.find(c => c != null);
+    if (base == null) return null;
     const points = timestamps.map((ts, i) => ({
       x: new Date(ts * 1000),
       y: closes[i] != null ? ((closes[i] - base) / base) * 100 : null,
@@ -652,9 +653,10 @@ function renderTickers() {
     const { symbol, closes, color } = asset;
     let pctEl = '';
 
-    if (closes && closes.length >= 2) {
-      const base = closes[0];
-      const last = closes[closes.length - 1];
+    const validCloses = closes ? closes.filter(c => c != null) : [];
+    if (validCloses.length >= 2) {
+      const base = validCloses[0];
+      const last = validCloses[validCloses.length - 1];
       const pct = ((last - base) / base) * 100;
       const cls = pct >= 0 ? 'pos' : 'neg';
       pctEl = `<span class="pct ${cls}">${fmtPct(pct)}</span>`;

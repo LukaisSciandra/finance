@@ -49,6 +49,15 @@ app.get('/api/chart/:symbol', async (req, res) => {
       return res.status(404).json({ error: 'No price data available' });
     }
 
+    // Filter out entries where the close price is null (common for mutual funds)
+    const pairs = timestamps.map((ts, i) => [ts, closes[i]]).filter(([, c]) => c != null);
+    const filteredTimestamps = pairs.map(([ts]) => ts);
+    const filteredCloses = pairs.map(([, c]) => c);
+
+    if (filteredCloses.length === 0) {
+      return res.status(404).json({ error: 'No price data available' });
+    }
+
     // Determine asset type from quoteType
     const quoteType = meta?.instrumentType || meta?.quoteType || 'EQUITY';
 
@@ -57,8 +66,8 @@ app.get('/api/chart/:symbol', async (req, res) => {
       name: meta?.longName || meta?.shortName || symbol,
       quoteType,
       currency: meta?.currency || 'USD',
-      timestamps,
-      closes,
+      timestamps: filteredTimestamps,
+      closes: filteredCloses,
     });
   } catch (err) {
     console.error(`Error fetching ${symbol}:`, err.message);
